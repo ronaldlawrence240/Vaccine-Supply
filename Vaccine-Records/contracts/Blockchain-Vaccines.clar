@@ -46,7 +46,7 @@
         expiration-timestamp: uint,
         available-dose-count: uint,
         optimal-storage-temperature: int,
-        batch-operational-status: (string-ascii 20),
+        batch-operational-status: (string-ascii 25),
         cold-chain-violation-count: uint,
         designated-storage-facility: (string-ascii 100),
         quality-assurance-notes: (string-ascii 500)
@@ -74,7 +74,7 @@
 (define-map certified-healthcare-providers 
     principal 
     {
-        professional-designation: (string-ascii 20),
+        professional-designation: (string-ascii 25),
         healthcare-institution-name: (string-ascii 100),
         license-validity-timestamp: uint
     }
@@ -114,7 +114,7 @@
     (> (len input-string) min-string-length)
 )
 
-(define-private (validate-brief-descriptor-string (input-string (string-ascii 20)))
+(define-private (validate-brief-descriptor-string (input-string (string-ascii 25)))
     (> (len input-string) min-string-length)
 )
 
@@ -162,7 +162,7 @@
 
 (define-public (register-authorized-healthcare-provider 
     (provider-principal-address principal)
-    (medical-specialization (string-ascii 20))
+    (medical-specialization (string-ascii 25))
     (affiliated-healthcare-facility (string-ascii 100))
     (professional-license-expiration uint))
     (begin
@@ -244,7 +244,7 @@
 
 (define-public (modify-vaccine-batch-operational-status
     (batch-tracking-identifier (string-ascii 32))
-    (new-operational-status (string-ascii 20)))
+    (new-operational-status (string-ascii 25)))
     (begin
         (asserts! (verify-healthcare-provider-credentials tx-sender) ERR-UNAUTHORIZED-ACCESS)
         (asserts! (validate-short-identifier-string batch-tracking-identifier) ERR-MALFORMED-INPUT-DATA)
@@ -315,25 +315,26 @@
                                 (merge selected-batch-data 
                                     {available-dose-count: (- (get available-dose-count selected-batch-data) u1)}))
                             
-                            (ok (map-set patient-immunization-database
-                                {unique-patient-identifier: patient-unique-identifier}
-                                {
-                                    complete-vaccination-history: (unwrap-panic (as-max-len? 
-                                        (append (get complete-vaccination-history existing-patient-record)
-                                            {
-                                                source-vaccine-batch: vaccine-batch-identifier,
-                                                administration-timestamp: current-block-timestamp,
-                                                vaccine-product-administered: (get vaccine-brand-name selected-batch-data),
-                                                sequential-dose-number: next-dose-sequence,
-                                                healthcare-provider-principal: tx-sender,
-                                                vaccination-facility-location: administration-facility-location,
-                                                next-dose-due-date: (some (+ current-block-timestamp mandatory-dose-interval-days))
-                                            }
-                                        ) max-immunization-history-entries)),
-                                    cumulative-doses-administered: next-dose-sequence,
-                                    documented-adverse-events: (get documented-adverse-events existing-patient-record),
-                                    medical-contraindication-status: (get medical-contraindication-status existing-patient-record)
-                                }))))
+                            (let ((new-vaccination-record {
+                                    source-vaccine-batch: vaccine-batch-identifier,
+                                    administration-timestamp: current-block-timestamp,
+                                    vaccine-product-administered: (get vaccine-brand-name selected-batch-data),
+                                    sequential-dose-number: next-dose-sequence,
+                                    healthcare-provider-principal: tx-sender,
+                                    vaccination-facility-location: administration-facility-location,
+                                    next-dose-due-date: (some (+ current-block-timestamp mandatory-dose-interval-days))
+                                })
+                                (updated-history (unwrap-panic (as-max-len? 
+                                    (append (get complete-vaccination-history existing-patient-record) new-vaccination-record) 
+                                    u10))))
+                                (ok (map-set patient-immunization-database
+                                    {unique-patient-identifier: patient-unique-identifier}
+                                    {
+                                        complete-vaccination-history: updated-history,
+                                        cumulative-doses-administered: next-dose-sequence,
+                                        documented-adverse-events: (get documented-adverse-events existing-patient-record),
+                                        medical-contraindication-status: (get medical-contraindication-status existing-patient-record)
+                                    })))))
                     
                     ;; Create initial patient record for first vaccination
                     (begin
